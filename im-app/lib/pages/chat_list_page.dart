@@ -93,8 +93,8 @@ class ChatListPageState extends State<ChatListPage> {
     final word = kw.trim();
     FocusScope.of(context).unfocus();
     if (word.isEmpty) return;
-    Navigator.of(context).push(MaterialPageRoute(
-        builder: (_) => SearchPage(initialKeyword: word)));
+    Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => SearchPage(initialKeyword: word)));
   }
 
   /// 非当前会话的补拉器（修 R-20）
@@ -476,32 +476,32 @@ class ChatListPageState extends State<ChatListPage> {
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-          child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 10),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 52,
-                  height: 52,
-                  decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  alignment: Alignment.center,
-                  child: Icon(icon, size: 26, color: color),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(16),
                 ),
-                const SizedBox(height: 8),
-                Text(title,
-                    style: TextStyle(
-                        fontSize: 13,
-                        color: context.cs.onSurface,
-                        fontWeight: FontWeight.w500)),
-              ],
-            ),
+                alignment: Alignment.center,
+                child: Icon(icon, size: 26, color: color),
+              ),
+              const SizedBox(height: 8),
+              Text(title,
+                  style: TextStyle(
+                      fontSize: 13,
+                      color: context.cs.onSurface,
+                      fontWeight: FontWeight.w500)),
+            ],
           ),
         ),
+      ),
     );
   }
 
@@ -512,9 +512,8 @@ class ChatListPageState extends State<ChatListPage> {
     return Scaffold(
       // 截图实测：会话列表页背景是**纯白 #FFFFFF**（不是全局浅灰 #F5F6F8）。
       // 「⊕」胶囊与搜索框的浅灰 #F1F1F1 正是在白底上才能看出边界。
-      backgroundColor: context.v2IsDark
-          ? const Color(0xFF000000)
-          : const Color(0xFFFFFFFF),
+      backgroundColor:
+          context.v2IsDark ? const Color(0xFF000000) : const Color(0xFFFFFFFF),
       body: SafeArea(
         child: PopScope(
           // 搜索模式下系统返回键先退搜索模式（不退出页面）；非搜索模式放行
@@ -536,21 +535,19 @@ class ChatListPageState extends State<ChatListPage> {
                   builder: (_, __) => _loading
                       ? _buildLoadingView()
                       : _visibleConvs.isNotEmpty
-                          ? RefreshIndicator(
-                              // 下拉手动全量载入：重新拉会话列表（含最新一条消息）
-                              color: AppTheme.primary,
-                              onRefresh: _load,
-                              child: ListView.builder(
-                                // 不足一屏也保留下拉刷新能力
-                                physics: const AlwaysScrollableScrollPhysics(),
-                                // 常驻搜索框已删（十七批）：原「搜索框底→行 1 顶」
-                                // 的 12 间距直接沿用为「头栏底→行 1 顶」，无空洞
-                                padding:
-                                    EdgeInsets.fromLTRB(0, 12 * s, 0, 120 * s),
-                                itemCount: _visibleConvs.length,
-                                itemBuilder: (_, i) =>
-                                    _convItem(_visibleConvs[i]),
-                              ),
+                          ? ListView.builder(
+                              // 下拉刷新已删（2026-09-19 用户要求）：列表数据
+                              // 由 WS 增量 + 进页/重连自动 _load 维护，不再
+                              // 需要手动全量刷新入口。physics 回默认，
+                              // 不足一屏不再强制可滚动（原 AlwaysScrollable
+                              // 是为撑出下拉手势用的）。
+                              // 常驻搜索框已删（十七批）：原「搜索框底→行 1 顶」
+                              // 的 12 间距直接沿用为「头栏底→行 1 顶」，无空洞
+                              padding:
+                                  EdgeInsets.fromLTRB(0, 12 * s, 0, 120 * s),
+                              itemCount: _visibleConvs.length,
+                              itemBuilder: (_, i) =>
+                                  _convItem(_visibleConvs[i]),
                             )
                           : _loadFailed && !_searchMode
                               ? _loadFailedView()
@@ -661,8 +658,8 @@ class ChatListPageState extends State<ChatListPage> {
                     height: 48.7 * s,
                     // 实测墨迹：圆环外径 24.7 + 环笔画 2.5 + 内嵌加号（臂长 12.3）
                     // ⇒ 用 add_circle_outline（环+加号），size 按「glyph 约占盒子 20/24」放大
-                    child: Icon(Icons.add_circle_outline,
-                        size: 29 * s, color: fg),
+                    child:
+                        Icon(Icons.add_circle_outline, size: 29 * s, color: fg),
                   ),
                 ),
               ],
@@ -706,8 +703,7 @@ class ChatListPageState extends State<ChatListPage> {
                   style: TextStyle(
                       fontSize: 17 * s,
                       height: 1.0,
-                      color:
-                          dark ? Colors.white : const Color(0xFF131927)),
+                      color: dark ? Colors.white : const Color(0xFF131927)),
                   cursorColor: AppTheme.primary,
                   decoration: InputDecoration(
                     isCollapsed: true,
@@ -831,7 +827,8 @@ class ChatListPageState extends State<ChatListPage> {
           convId: c.id,
           // GlobalKey：侧滑状态跟随会话身份移动（列表重排不错配到别的行）；
           // 置顶/免打扰等操作完成后由 _closeSlider 经它显式收起菜单。
-          key: _slideKeys.putIfAbsent(c.id, () => GlobalKey<AppSlidableState>()),
+          key:
+              _slideKeys.putIfAbsent(c.id, () => GlobalKey<AppSlidableState>()),
           cardColor: cardBg,
           actions: [
             SlidableAction(
@@ -842,7 +839,8 @@ class ChatListPageState extends State<ChatListPage> {
               onTap: () => _togglePin(c),
             ),
             SlidableAction(
-              icon: c.mute ? Icons.notifications_active : Icons.notifications_off,
+              icon:
+                  c.mute ? Icons.notifications_active : Icons.notifications_off,
               label: c.mute ? t('chatListUnmute') : t('chatListMute'),
               color: context.cs.outlineVariant,
               foregroundColor: context.cs.onSurface,
@@ -969,7 +967,8 @@ class ChatListPageState extends State<ChatListPage> {
                                             c.peerRoleAny)) ...[
                                           SizedBox(width: 7 * s),
                                           const V2SealBadge(
-                                              size: 18, color: Color(0xFF4FA4EE)),
+                                              size: 18,
+                                              color: Color(0xFF4FA4EE)),
                                         ],
                                       ],
                                     ),
@@ -997,7 +996,8 @@ class ChatListPageState extends State<ChatListPage> {
                                   if (c.mute && c.unread == 0)
                                     Padding(
                                       padding: EdgeInsets.only(right: 4 * s),
-                                      child: Icon(Icons.notifications_off_outlined,
+                                      child: Icon(
+                                          Icons.notifications_off_outlined,
                                           size: 20 * s,
                                           color: context.cs.onSurfaceVariant),
                                     )
@@ -1022,7 +1022,8 @@ class ChatListPageState extends State<ChatListPage> {
                                                 ? context.cs.onSurfaceVariant
                                                 : (c.lastMessage == null
                                                     ? const Color(0xFFA5A7AD)
-                                                    : const Color(0xFF6A6F79)))),
+                                                    : const Color(
+                                                        0xFF6A6F79)))),
                                   ),
                                   if (c.unread > 0)
                                     Container(
