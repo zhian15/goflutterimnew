@@ -1,0 +1,53 @@
+# Codemagic CI 配置（放仓库根目录）
+# 仓库是 monorepo，Flutter 工程在 im-app/ 子目录。
+# 关键：working_directory 必须设在「workflow 级别」（见 ios-ipa 下那一行），
+#       这样 Codemagic 内置的「Install Flutter dependencies」自动步骤 + 所有脚本
+#       都会切到 im-app/ 再执行。只写在单个 script 上无效——自动步骤仍会去仓库根找 pubspec.yaml。
+#
+# 签名方式：手动上传证书（App Store Connect API Key 自动签名的写法见文末注释）
+#   1. Codemagic 网页 → Personal Account → Settings → Code signing identities → 上传：
+#      - .p12 证书（含私钥）
+#      - .mobileprovision 描述文件（Bundle ID 必须是 com.ioslgm.44108，类型 Ad-Hoc）
+#   2. 描述文件类型决定导出方式：
+#      - 企业证书(In-House) → method: enterprise
+#      - 正式发布证书(ad-hoc) → method: ad-hoc（当前配置）
+#      - 开发证书(development) → method: development
+#   3. use-profiles 脚本会自动把上传的证书/描述文件挂到工程上
+
+workflows:
+  ios-ipa:
+    name: iOS IPA
+    max_build_duration: 60
+    working_directory: im-app            # monorepo：所有步骤（含自动依赖安装）都在此目录执行
+    environment:
+      flutter: stable
+      xcode: latest
+      ios_signing:
+        distribution_type: ad_hoc          # 企业证书改 enterprise；上 TestFlight 改 app_store
+        bundle_identifier: com.ioslgm.44108 # 与苹果描述文件一致
+    scripts:
+      - name: 拉取 Flutter 依赖
+        script: flutter packages pub get
+      - name: 挂载证书并打包 IPA
+        script: |
+          xcode-project use-profiles
+          # use-profiles 把导出配置写到文件（本环境路径固定），而非 CM_EXPORT_OPTIONS 变量
+          EXPORT_OPTS="${CM_EXPORT_OPTIONS:-/Users/builder/export_options.plist}"
+          flutter build ipa --release --export-options-plist="$EXPORT_OPTS"
+    artifacts:
+      - build/ios/ipa/*.ipa               # 相对 working_directory(im-app)，即 im-app/build/ios/ipa/*.ipa
+    publishing:
+      email:
+        recipients:
+          - fincqwe123@gmail.com
+        notify:
+          success: true
+          failure: true
+
+# —— 自动签名备选（App Store Connect API Key 方式，上 TestFlight/商店推荐）——
+# environment 里改为：
+#   ios_signing:
+#     distribution_type: app_store
+#     bundle_identifier: com.ioslgm.44108
+# 并在 Codemagic → Teams → Developer accounts 绑定 API Key，删掉 use-profiles 手动挂载步骤
+# 的依赖也可（Codemagic 会自动取证书）；导出配置 method 改 app-store
