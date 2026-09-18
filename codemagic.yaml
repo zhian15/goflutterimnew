@@ -39,7 +39,7 @@ workflows:
     publishing:
       email:
         recipients:
-          - fincqwe123@gmail.com
+          - 2195823922@qq.com
         notify:
           success: true
           failure: true
