@@ -453,6 +453,8 @@ class AppLocalizations {
       'convSetGroupMembers': '群成员',
       'convSetGroupProfile': '群聊资料',
       'convSetHistoryCleared': '聊天记录已删除',
+      'callPermCamTitle': '无法打开摄像头',
+      'callPermCamMsg': '摄像头权限已被拒绝，请在系统设置中开启后重新拨打。',
       'clearHistoryTitle': '删除聊天记录',
       'clearSheetTitleFmt': '清空与 {name} 的聊天记录？',
       'clearSheetSub': '此操作无法撤销',

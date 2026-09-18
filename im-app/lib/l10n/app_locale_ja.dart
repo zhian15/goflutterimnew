@@ -337,6 +337,8 @@ const Map<String, String> jaDict = {
   'convSetGroupMembers': 'グループメンバー',
   'convSetGroupProfile': 'グループ情報',
   'convSetHistoryCleared': 'チャット履歴を削除しました',
+  'callPermCamTitle': 'カメラを起動できません',
+  'callPermCamMsg': 'カメラの権限が拒否されています。設定で許可してから再度おかけください。',
   'clearHistoryTitle': 'チャット履歴を削除',
   'clearSheetTitleFmt': '{name} とのチャット履歴を消去しますか？',
   'clearSheetSub': 'この操作は取り消せません',

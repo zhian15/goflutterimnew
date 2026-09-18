@@ -7,7 +7,7 @@
 		<key>CFBundleDevelopmentRegion</key>
 		<string>$(DEVELOPMENT_LANGUAGE)</string>
 		<key>CFBundleDisplayName</key>
-		<string>知安</string>
+		<string>青鸟</string>
 		<key>CFBundleExecutable</key>
 		<string>$(EXECUTABLE_NAME)</string>
 		<key>CFBundleIdentifier</key>
@@ -15,7 +15,7 @@
 		<key>CFBundleInfoDictionaryVersion</key>
 		<string>6.0</string>
 		<key>CFBundleName</key>
-		<string>知安</string>
+		<string>青鸟</string>
 		<key>CFBundlePackageType</key>
 		<string>APPL</string>
 		<key>CFBundleShortVersionString</key>
@@ -38,9 +38,14 @@
 		<key>NSPhotoLibraryAddUsageDescription</key>
 		<string>保存图片到相册时需要添加照片权限</string>
 		<!-- 发现页内置 WebView：仅对 App 内 WKWebView 放行 http 网页（小程序）；
-	     App 自身网络请求仍强制 HTTPS；NSAllowsLocalNetworking 保留局域网 http 调试能力 -->
+	     App 自身网络请求仍强制 HTTPS；NSAllowsLocalNetworking 保留局域网 http 调试能力。
+	     2026-09-19 补 NSAllowsArbitraryLoads：ad-hoc 分发包接口可能用 http（无证书域名），
+	     iOS ATS 默认拦截一切 http → 启动页接口全挂反复重试像卡死。ad-hoc 包全局放行；
+	     以后上 App Store 前再按需收紧（https 接口本来就不需要这行）。 -->
 		<key>NSAppTransportSecurity</key>
 		<dict>
+			<key>NSAllowsArbitraryLoads</key>
+			<true/>
 			<key>NSAllowsArbitraryLoadsInWebContent</key>
 			<true/>
 			<key>NSAllowsLocalNetworking</key>

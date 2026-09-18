@@ -32,6 +32,7 @@ import '../services/voice_recorder_service.dart'; // 语音录制（type=4 语�
 import '../services/voice_player_service.dart'; // 语音播放（全局状态供气泡订阅）
 import '../services/e2ee_service.dart'; // E2EE 端到端加密（type=13，2026-09-18 §36）
 import 'package:permission_handler/permission_handler.dart'; // 进入语音模式提前申请麦克风权限
+import '../utils/call_permissions.dart'; // 通话权限申请（拨打前申请摄像头/麦克风，2026-09-19）
 import 'package:cross_file/cross_file.dart'; // XFile（语音本地文件上传）
 import '../constants/message_type.dart';
 import '../services/group_file_service.dart';
@@ -2754,6 +2755,37 @@ class _ChatPageState extends State<ChatPage> {
       AppDialogs.toast(context, _t('chatCallInProgress'));
       return;
     }
+    // 拨打前先申请权限（2026-09-19 iOS 修复）：TRTC 插件不主动弹权限，
+    // 原先进房才申请——iOS 首次弹窗被拒（永久拒绝后系统不再弹）时摄像头
+    // 静默失败 = 自己没画面。提前到拨号动作时申请，被永久拒绝则引导去设置。
+    if (type == 'video') {
+      final perms = await CallPermissions.ensureForVideoSplit();
+      if (!perms.mic) {
+        if (!mounted) return;
+        AppDialogs.toast(context, _t('videoCallNeedPermissions'));
+        return;
+      }
+      if (!perms.cam) {
+        final st = await Permission.camera.status;
+        if (st.isPermanentlyDenied && mounted) {
+          final go = await AppDialogs.confirm(
+            context,
+            title: _t('callPermCamTitle'),
+            message: _t('callPermCamMsg'),
+            confirmText: _t('scanCamOpenSettings'),
+          );
+          if (go == true) await CallPermissions.openSettings();
+        }
+        return;
+      }
+    } else {
+      final ok = await CallPermissions.ensureForVoice();
+      if (!ok) {
+        if (!mounted) return;
+        AppDialogs.toast(context, _t('videoCallNeedPermissions'));
+        return;
+      }
+    }
     if (isGroup) {
       await CallService.instance.startGroupCall(
         convId: widget.conv.id,
@@ -4229,18 +4261,33 @@ class _ChatPageState extends State<ChatPage> {
                     // 大图（降采样位图 ~10MB）每帧重新栅格化（Davey 主源之一）
                     Positioned.fill(
                         child: RepaintBoundary(child: _chatBackgroundLayer())),
-                    _loading
-                        ? _buildLoadingView()
-                        : _loadFailed
-                            ? _buildLoadFailed()
-                            : RefreshIndicator(
-                                // 下拉 = 加载更早的消息（不再全量刷新）：
-                                // 头部插入 + 滚动位置补偿见 _loadOlder；
-                                // 没有更早历史时立即完成，指示器直接收回
-                                color: AppTheme.primary,
-                                onRefresh: _loadOlder,
-                                child: _buildMessageList(),
-                              ),
+                    // 点消息区收键盘 + 收面板（2026-09-19 需求 1）：
+                    // translucent 不拦截列表自身手势——点消息行（预览/图片等）由
+                    // 内层手势赢，点空白处（列表间隙/背景）才触发这里收键盘。
+                    GestureDetector(
+                      behavior: HitTestBehavior.translucent,
+                      onTap: () {
+                        if (_plusOpen || _emojiOpen) {
+                          setState(() {
+                            _plusOpen = false;
+                            _emojiOpen = false;
+                          });
+                        }
+                        FocusScope.of(context).unfocus();
+                      },
+                      child: _loading
+                          ? _buildLoadingView()
+                          : _loadFailed
+                              ? _buildLoadFailed()
+                              : RefreshIndicator(
+                                  // 下拉 = 加载更早的消息（不再全量刷新）：
+                                  // 头部插入 + 滚动位置补偿见 _loadOlder；
+                                  // 没有更早历史时立即完成，指示器直接收回
+                                  color: AppTheme.primary,
+                                  onRefresh: _loadOlder,
+                                  child: _buildMessageList(),
+                                ),
+                    ),
                     // ===== 置顶消息卡 + 群公告卡（悬浮层）：叠在列表上方，不占布局。
                     // 单个 Positioned 包 Column —— 两卡永远纵向排列，绝不重叠；
                     // 出现/消失（首次返回、× 关闭）都不再把列表顶下去 = 零跳动。 =====
@@ -4270,17 +4317,7 @@ class _ChatPageState extends State<ChatPage> {
                         right: 0,
                         child: IgnorePointer(child: _buildE2eeBanner()),
                       ),
-                    // 功能/表情面板打开时：点消息区任意处收起（translucent 不拦截列表自身手势）
-                    if (_plusOpen || _emojiOpen)
-                      Positioned.fill(
-                        child: GestureDetector(
-                          behavior: HitTestBehavior.translucent,
-                          onTap: () => setState(() {
-                            _plusOpen = false;
-                            _emojiOpen = false;
-                          }),
-                        ),
-                      ),
+                    // （功能/表情面板收起已并入上方消息区点按手势，原 Positioned.fill 拦截层删除）
                     // ===== 表情面板：宽屏=右下角悬浮小卡片；窄屏=输入栏上方全宽抽屉 =====
                     if (_emojiOpen && Breakpoints.isWide(context))
                       Positioned(

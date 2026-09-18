@@ -336,6 +336,8 @@ const Map<String, String> zhTDict = {
   'convSetGroupMembers': '群成員',
   'convSetGroupProfile': '群聊資料',
   'convSetHistoryCleared': '聊天記錄已刪除',
+  'callPermCamTitle': '無法開啟攝像頭',
+  'callPermCamMsg': '攝像頭權限已被拒絕，請在系統設定中開啟後重新撥打。',
   'clearHistoryTitle': '刪除聊天記錄',
   'clearSheetTitleFmt': '清空與 {name} 的聊天記錄？',
   'clearSheetSub': '此操作無法撤銷',
