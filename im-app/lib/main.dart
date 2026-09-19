@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
@@ -31,7 +32,20 @@ Future<void> main() async {
   // 需求5：加载运行时接口配置（config/app_config.json），改 IP 不用重新编译
   await AppConfig.instance.loadRuntimeConfig();
   // 需求10：任意接口 401 且刷新失败 → 清登录态并跳转登录页
+  //
+  // 【修「被挤下线后登录页反复跳十几遍」（2026-09-19，iOS 实测）】
+  // 被顶号后 rt 作废，首页并发的十几个请求同时 401 → 刷新全部 invalid →
+  // 每个都各自走到这里反复 push 登录页。刷新已在 ApiClient 做单飞共享，
+  // 这里再加 5 秒时间窗去重兜底：窗口内只跳一次（再触发也直接忽略）。
+  // 5 秒远短于「重新登录成功」所需时间，不影响后续真正的再次被踢提醒。
+  DateTime? _lastKickedNav;
   ApiClient.instance.onUnauthorized = () {
+    final now = DateTime.now();
+    final last = _lastKickedNav;
+    if (last != null && now.difference(last) < const Duration(seconds: 5)) {
+      return;
+    }
+    _lastKickedNav = now;
     appNavigatorKey.currentState?.pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => const LoginPage()),
       (route) => false,
@@ -264,8 +278,10 @@ class _AuthGateState extends State<AuthGate> {
   bool _deciding = false; // _decide 防重入标记
 
   /// 启动自动检查更新：进主界面 2 秒后静默拉后台版本配置，
-  /// 有新版本且配置了下载地址 → 弹更新弹窗；失败/无新版本完全不打扰
+  /// 有新版本且配置了下载地址 → 弹更新弹窗；失败/无新版本完全不打扰。
+  /// H5（Flutter Web）不检测更新——网页刷新即最新，无需版本提示。
   Future<void> _autoCheckUpdate() async {
+    if (kIsWeb) return;
     await Future.delayed(const Duration(seconds: 2));
     final info = await UpdateService.fetch();
     if (info == null || !info.hasNew || !info.hasUrl) return;

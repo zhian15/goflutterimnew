@@ -241,7 +241,32 @@ class ApiClient {
   /// 三态返回：ok / invalid（服务端拒绝，清登录态）/ network（网络故障，保留登录态）。
   Future<AuthRefreshResult> refreshSession() => _tryRefresh();
 
-  Future<AuthRefreshResult> _tryRefresh() async {
+  /// 刷新单飞（single-flight）：同一时刻只允许一次在途刷新，并发 401 共享同一结果。
+  ///
+  /// 【修「被挤下线后登录页反复跳十几遍」（2026-09-19，iOS 实测）】
+  /// 之前每个 401 各自独立 POST /auth/refresh：被挤后 rt 已被服务端作废，
+  /// 十几个并发 401 → 十几次刷新全判 invalid → 每个都各自清登录态 +
+  /// 跳登录页 → 登录页连续跳十几遍。单飞后 N 个 401 只发一次刷新请求、
+  /// 共享同一个结果，跳转也只触发一次（配合 main.dart 的时间窗去重双保险）。
+  Completer<AuthRefreshResult>? _refreshFlight;
+
+  Future<AuthRefreshResult> _tryRefresh() {
+    final inFlight = _refreshFlight;
+    if (inFlight != null) return inFlight.future;
+    final c = Completer<AuthRefreshResult>();
+    _refreshFlight = c;
+    _doRefresh().then((r) {
+      if (!c.isCompleted) c.complete(r);
+    }).catchError((Object _) {
+      // _doRefresh 内部已捕获全部异常，这里纯防御
+      if (!c.isCompleted) c.complete(AuthRefreshResult.network);
+    }).whenComplete(() {
+      if (identical(_refreshFlight, c)) _refreshFlight = null;
+    });
+    return c.future;
+  }
+
+  Future<AuthRefreshResult> _doRefresh() async {
     // secure storage 在部分安卓机型上偶发读取失败/挂起：
     // 重试 3 次（每次 5s 封顶），都读不到按 network 处理 ——
     // "读不到 refresh token" ≠ "没登录过"，不能因此清凭据。

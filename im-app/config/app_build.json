@@ -11,13 +11,13 @@
     "icon": "APP 图标源图，建议 1024x1024 PNG，放在 assets/icon/ 下"
   },
 
-  "appName": "青鸟",
-  "packageName": "com.qingniao.im",
-  "iosPackageName": "com.futoolapp.tool",
+  "appName": "知安",
+  "packageName": "com.zhian.im",
+  "iosPackageName": "com.ioslgm.44108",
   "versionName": "1.3.0",
   "versionCode": 5,
-  "apiBase": "https://im.x123.wang",
-  "wsBase": "wss://im.x123.wang/ws",
+  "apiBase": "https://zhian.ventr.cn/",
+  "wsBase": "wss://zhian.ventr.cn/ws",
   "jpushAppKey": "b1ba48f444fae6c40da78888",
   "icon": "assets/icon/app_icon.png"
 }
