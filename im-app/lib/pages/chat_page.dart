@@ -1912,7 +1912,8 @@ class _ChatPageState extends State<ChatPage> {
       final e2Content = await E2eeService.instance
           .encryptForChat(text, peerUid: widget.conv.peerId, myUid: _myUid);
       if (e2Content != null) {
-        final e2Bubble = _localMsg(MessageType.e2Text, text, clientMsgId, q?.msgId);
+        final e2Bubble =
+            _localMsg(MessageType.e2Text, text, clientMsgId, q?.msgId);
         setState(() => _msgs.add(e2Bubble));
         _armWatchdog(clientMsgId);
         _trackPending(e2Bubble);
@@ -3432,7 +3433,8 @@ class _ChatPageState extends State<ChatPage> {
   /// content 存 JSON {"url","duration","waveform","size"}，服务端零字段改动、零 migration。
   Future<void> _sendVoice(VoiceRecorderResult v) async {
     final ext = v.path.contains('.') ? v.path.split('.').last : 'm4a';
-    final name = 'voice_${_myUid}_${DateTime.now().millisecondsSinceEpoch}.$ext';
+    final name =
+        'voice_${_myUid}_${DateTime.now().millisecondsSinceEpoch}.$ext';
     final clientMsgId = _uuid();
     // 占位气泡：content 先放 duration+waveform（无 url），上传完再补 url
     final placeholder = <String, dynamic>{
@@ -3440,8 +3442,8 @@ class _ChatPageState extends State<ChatPage> {
       'waveform': v.waveform,
       'size': v.sizeBytes,
     };
-    final bubble =
-        _localMsg(MessageType.voice, jsonEncode(placeholder), clientMsgId, null);
+    final bubble = _localMsg(
+        MessageType.voice, jsonEncode(placeholder), clientMsgId, null);
     setState(() {
       _msgs.add(bubble);
       _jumpToLatest();
@@ -3457,8 +3459,7 @@ class _ChatPageState extends State<ChatPage> {
     } catch (e) {
       if (mounted) {
         _cancelWatchdog(clientMsgId);
-        setState(() =>
-            _msgs.removeWhere((x) => x.clientMsgId == clientMsgId));
+        setState(() => _msgs.removeWhere((x) => x.clientMsgId == clientMsgId));
         _toast(_t('chatFileSendFailed', {'error': _errMsg(e, e.toString())}));
       }
       return;
@@ -3468,8 +3469,7 @@ class _ChatPageState extends State<ChatPage> {
     if (object.isEmpty || url.isEmpty) {
       if (mounted) {
         _cancelWatchdog(clientMsgId);
-        setState(() =>
-            _msgs.removeWhere((x) => x.clientMsgId == clientMsgId));
+        setState(() => _msgs.removeWhere((x) => x.clientMsgId == clientMsgId));
         _toast(_t('chatFileNotSupported'));
       }
       return;
@@ -3478,8 +3478,8 @@ class _ChatPageState extends State<ChatPage> {
     placeholder['url'] = url;
     placeholder['object'] = object;
     try {
-      final resp = await _svc.sendRaw(widget.conv.id, MessageType.voice,
-          jsonEncode(placeholder),
+      final resp = await _svc.sendRaw(
+          widget.conv.id, MessageType.voice, jsonEncode(placeholder),
           clientMsgId: clientMsgId);
       if (!mounted) return;
       _replaceLocalWithServer(resp, clientMsgId);
@@ -3624,8 +3624,8 @@ class _ChatPageState extends State<ChatPage> {
               child: Text(
                 _t('e2Banner'),
                 textAlign: TextAlign.center,
-                style: TextStyle(
-                    fontSize: 12, color: context.cs.onSurfaceVariant),
+                style:
+                    TextStyle(fontSize: 12, color: context.cs.onSurfaceVariant),
               ),
             ),
           ),
@@ -4846,8 +4846,7 @@ class _VoiceBubble extends StatelessWidget {
   final String content;
   final bool isMine;
   final String? msgId;
-  const _VoiceBubble(
-      {required this.content, required this.isMine, this.msgId});
+  const _VoiceBubble({required this.content, required this.isMine, this.msgId});
 
   static Map<String, dynamic> _decode(String c) {
     try {
@@ -4869,10 +4868,9 @@ class _VoiceBubble extends StatelessWidget {
     final d = _decode(content);
     final durMs = (d['duration'] as num?)?.toInt() ?? 0;
     final url = (d['url'] as String?) ?? '';
-    final wave = (d['waveform'] as List?)
-            ?.map((e) => (e as num).toDouble())
-            .toList() ??
-        [];
+    final wave =
+        (d['waveform'] as List?)?.map((e) => (e as num).toDouble()).toList() ??
+            [];
     final sec = (durMs / 1000).round();
     final bg =
         isMine ? _chatMyBubbleColor(context) : _chatPeerBubbleColor(context);
@@ -4885,9 +4883,8 @@ class _VoiceBubble extends StatelessWidget {
         final progress = (st.msgId == msgId && st.durationMs > 0)
             ? (st.positionMs / st.durationMs).clamp(0.0, 1.0)
             : 0.0;
-        final icon = isPlaying
-            ? Icons.graphic_eq_rounded
-            : Icons.play_arrow_rounded;
+        final icon =
+            isPlaying ? Icons.graphic_eq_rounded : Icons.play_arrow_rounded;
         final bars = _WaveBars(
             values: wave, progress: progress, playing: isPlaying, color: fg);
         final durText = Text('$sec"',
@@ -4914,7 +4911,8 @@ class _VoiceBubble extends StatelessWidget {
           child: GestureDetector(
             onTap: url.isEmpty
                 ? null
-                : () => VoicePlayerService.instance.toggle(url, msgId ?? ''),
+                : () => VoicePlayerService.instance
+                    .toggle(url, msgId ?? '', durationMs: durMs),
             behavior: HitTestBehavior.opaque,
             child: Container(
               width: _width(durMs),
@@ -5083,8 +5081,7 @@ class _MsgRow extends StatelessWidget {
   /// 本地乐观明文（非 JSON）原样返回，发送侧无感。
   String _e2PlainOf(String Function(String) t) {
     final mid = msg.msgId ?? '';
-    final key =
-        mid.isNotEmpty ? 's:$mid' : 'c:${msg.clientMsgId}';
+    final key = mid.isNotEmpty ? 's:$mid' : 'c:${msg.clientMsgId}';
     return E2eeService.instance.plainFor(
       msg.content,
       key,
@@ -5193,9 +5190,8 @@ class _MsgRow extends StatelessWidget {
           } else {
             // type=13：同步取明文（缓存命中），未命中显示占位并异步解密重绘；
             // 解锁后 E2eeService.invalidateCache() + setState 即可刷新。
-            final plainText = msg.type == MessageType.e2Text
-                ? _e2PlainOf(t)
-                : msg.content;
+            final plainText =
+                msg.type == MessageType.e2Text ? _e2PlainOf(t) : msg.content;
             bubble = Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
@@ -6800,7 +6796,8 @@ class _InputBarState extends State<_InputBar> {
     }
     if (!ok) {
       _pointerDown = false;
-      AppDialogs.toast(context, AppLocalizations.of(context).t('chatVoicePermissionDenied'));
+      AppDialogs.toast(
+          context, AppLocalizations.of(context).t('chatVoicePermissionDenied'));
       return;
     }
     _recStartY = e.position.dy;
@@ -6838,7 +6835,8 @@ class _InputBarState extends State<_InputBar> {
     if (res == null) return;
     if (res.durationMs < 1000) {
       if (mounted) {
-        AppDialogs.toast(context, AppLocalizations.of(context).t('chatVoiceTooShort'));
+        AppDialogs.toast(
+            context, AppLocalizations.of(context).t('chatVoiceTooShort'));
       }
       return;
     }

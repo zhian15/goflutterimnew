@@ -51,6 +51,12 @@ void main(List<String> args) {
   final cfg = jsonDecode(cfgFile.readAsStringSync()) as Map<String, dynamic>;
   final appName = (cfg['appName'] ?? '').toString();
   final pkg = (cfg['packageName'] ?? '').toString();
+  // iOS 包名：不填则跟随 packageName（2026-09-19）。
+  // 为什么单独一个字段：给外包做壳时 iOS 包名由**苹果描述文件**决定
+  // （profile 与包名绑死，错一个字母都签不上），可能和 Android 不同。
+  final iosPkg = (cfg['iosPackageName'] ?? '').toString().trim().isNotEmpty
+      ? (cfg['iosPackageName'] ?? '').toString().trim()
+      : pkg;
   final verName = (cfg['versionName'] ?? '').toString();
   final verCode = (cfg['versionCode'] ?? 1).toString();
   final apiBase = (cfg['apiBase'] ?? '').toString();
@@ -60,6 +66,7 @@ void main(List<String> args) {
   stdout.writeln('读取配置 $_configFile');
   stdout.writeln('  应用名 : $appName');
   stdout.writeln('  包名   : $pkg');
+  if (iosPkg != pkg) stdout.writeln('  iOS包名 : $iosPkg');
   stdout.writeln('  版本   : $verName (code $verCode)');
   stdout.writeln('  接口   : $apiBase');
   stdout.writeln('  WS     : $wsBase');
@@ -82,14 +89,16 @@ void main(List<String> args) {
     const _iosPlist = 'ios/Runner/Info.plist';
     String _plistString(String key, String value) =>
         '<key>$key</key>\n\t\t<string>$value</string>';
-    changed += _replaceMapped(_iosPlist,
+    changed += _replaceMapped(
+        _iosPlist,
         RegExp(r'<key>CFBundleDisplayName</key>\s*<string>[^<]*</string>'),
-        (m) => _plistString(
-            'CFBundleDisplayName', appName), '应用名 → Info.plist CFBundleDisplayName');
-    changed += _replaceMapped(_iosPlist,
+        (m) => _plistString('CFBundleDisplayName', appName),
+        '应用名 → Info.plist CFBundleDisplayName');
+    changed += _replaceMapped(
+        _iosPlist,
         RegExp(r'<key>CFBundleName</key>\s*<string>[^<]*</string>'),
-        (m) => _plistString(
-            'CFBundleName', appName), '应用名 → Info.plist CFBundleName');
+        (m) => _plistString('CFBundleName', appName),
+        '应用名 → Info.plist CFBundleName');
   }
 
   // 2) 包名：先读出 gradle 里当前的旧包名（迁移 Kotlin 源码要用），再替换
@@ -117,6 +126,41 @@ void main(List<String> args) {
     changed += _ensureKotlinPackageMatches(pkg);
   }
 
+  // 2.5) iOS 包名 → project.pbxproj（2026-09-19）。
+  // 为什么必须同步：Codemagic/Mac 打 IPA 时签名按包名匹配描述文件，
+  // 工程包名与 profile 不一致会报「No matching profiles found」。
+  // 以前这个文件只有 Android applicationId 会同步，iOS 包名一直要手改——
+  // 实测踩坑（com.futoolapp.tool 外包就因此签不上）。
+  // 细节：
+  //   - 替换**全部**出现（Runner 主 target 3 处 + RunnerTests 3 处），
+  //     replaceFirst 只改第一处会留下 RunnerTests 的旧前缀；
+  //   - RunnerTests 的包名带 .RunnerTests 后缀，替换时保留原后缀；
+  //   - 值统一写成带引号形式（pbxproj 引号可省略，带引号永远合法）。
+  if (iosPkg.isNotEmpty) {
+    const pbxproj = 'ios/Runner.xcodeproj/project.pbxproj';
+    final f = File(pbxproj);
+    if (!f.existsSync()) {
+      stdout.writeln('  ⚠ 跳过（文件不存在）：$pbxproj');
+    } else {
+      final src = f.readAsStringSync();
+      final out = src.replaceAllMapped(
+        RegExp(r'PRODUCT_BUNDLE_IDENTIFIER\s*=\s*"?([^";]+)"?\s*;'),
+        (m) {
+          final old = m.group(1)!;
+          final suffix = old.endsWith('.RunnerTests') ? '.RunnerTests' : '';
+          return 'PRODUCT_BUNDLE_IDENTIFIER = "$iosPkg$suffix";';
+        },
+      );
+      if (out == src) {
+        stdout.writeln('  · 未变：iOS 包名 → pbxproj（已是 $iosPkg）');
+      } else {
+        f.writeAsStringSync(out);
+        stdout.writeln('  ✓ iOS 包名 → $pbxproj（$iosPkg）');
+        changed++;
+      }
+    }
+  }
+
   // 3) 版本 → pubspec.yaml（Gradle 的 flutter.versionName/Code 自动跟随）
   if (verName.isNotEmpty) {
     changed += _replaceOnce(
@@ -137,15 +181,19 @@ void main(List<String> args) {
     );
   }
 
-  // 4) 接口地址 → 运行时配置（App 启动时读取）
+  // 4) 接口地址 → 运行时配置（App 启动时读取）。
+  // jpushAppKey 透传：config/app_build.json 配了才写（2026-09-18 修复——
+  // 以前整体重写会把手工放进 runtime config 的 jpushAppKey 抹掉）。
+  final jpushKey = (cfg['jpushAppKey'] ?? '').toString();
   final runtime = File(_runtimeCfg);
   if (!runtime.existsSync()) {
     runtime.createSync(recursive: true);
   }
-  final runtimeJson = jsonEncode({
-    'apiBase': apiBase,
-    'wsBase': wsBase,
-  });
+  final runtimeJson = jsonEncode(
+    jpushKey.isNotEmpty
+        ? {'apiBase': apiBase, 'wsBase': wsBase, 'jpushAppKey': jpushKey}
+        : {'apiBase': apiBase, 'wsBase': wsBase},
+  );
   if (runtime.readAsStringSync().trim() != runtimeJson) {
     runtime.writeAsStringSync('$runtimeJson\n');
     stdout.writeln('  ✓ 接口地址 → $_runtimeCfg');
@@ -180,14 +228,29 @@ void main(List<String> args) {
   // 包名变更的强制提示（漏掉这两步是「换包名后一启动就闪退」的最常见原因）
   if (pkg.isNotEmpty && oldPkg != null && oldPkg != pkg) {
     stdout.writeln('');
-    stdout.writeln('============================================================');
+    stdout.writeln(
+        '============================================================');
     stdout.writeln('⚠ 包名已变更：$oldPkg → $pkg');
     stdout.writeln('  1. 必须先执行 flutter clean 再 flutter build apk');
     stdout.writeln('     （不 clean 会残留旧包名的编译产物，APK 一启动就闪退）');
     stdout.writeln('  2. 极光 AppKey 与包名绑定：去极光控制台用新包名重建应用，');
-    stdout.writeln('     把新 AppKey 替换到 android/app/build.gradle.kts 的 JPUSH_APPKEY');
+    stdout.writeln(
+        '     把新 AppKey 替换到 android/app/build.gradle.kts 的 JPUSH_APPKEY');
     stdout.writeln('  3. 换包名 = 换应用：老版本无法覆盖升级，需卸载重装');
-    stdout.writeln('============================================================');
+    stdout.writeln(
+        '============================================================');
+  }
+  // iOS 包名与描述文件的配套提示（签名按包名匹配，错一个字母都签不上）
+  if (iosPkg.isNotEmpty) {
+    stdout.writeln('');
+    stdout.writeln(
+        '============================================================');
+    stdout.writeln('⚠ iOS 包名：$iosPkg');
+    stdout.writeln('  1. 苹果后台的 App ID 与 ad-hoc 描述文件必须用同一个包名；');
+    stdout.writeln('  2. codemagic.yaml 的 bundle_identifier 也要改成这个值；');
+    stdout.writeln('  3. 换包名 = 描述文件全部重新生成，旧 profile 不通用。');
+    stdout.writeln(
+        '============================================================');
   }
 }
 
@@ -233,8 +296,8 @@ int _replaceMapped(
 String? _readCurrentPackage(String gradlePath) {
   final f = File(gradlePath);
   if (!f.existsSync()) return null;
-  final m = RegExp(r'namespace\s*=\s*"([^"]*)"')
-      .firstMatch(f.readAsStringSync());
+  final m =
+      RegExp(r'namespace\s*=\s*"([^"]*)"').firstMatch(f.readAsStringSync());
   return m?.group(1);
 }
 
@@ -272,7 +335,8 @@ int _migrateKotlinSources(String oldPkg, String newPkg) {
     stdout.writeln('  ✓ Kotlin 源码迁移：$oldPkg → $newPkg（$count 个文件）');
   } else if (!newDir.existsSync()) {
     final newDirPath = newPkg.replaceAll('.', '/');
-    stdout.writeln('  ⚠ 找不到 Kotlin 源码目录：$_kotlinRoot/${oldPkg.replaceAll('.', '/')}');
+    stdout.writeln(
+        '  ⚠ 找不到 Kotlin 源码目录：$_kotlinRoot/${oldPkg.replaceAll('.', '/')}');
     stdout.writeln('    请手动创建 $_kotlinRoot/$newDirPath/MainActivity.kt，');
     stdout.writeln('    第一行必须写 package $newPkg，否则 APK 一启动就闪退！');
   }
@@ -345,7 +409,8 @@ void _maybeGenerate({
   if (out.isNotEmpty) stdout.writeln(out);
   if (err.isNotEmpty) stderr.writeln(err);
   if (r.exitCode != 0) {
-    stderr.writeln('  ✗ $label 生成失败（exit ${r.exitCode}），可单独重跑：dart run $pkgName');
+    stderr
+        .writeln('  ✗ $label 生成失败（exit ${r.exitCode}），可单独重跑：dart run $pkgName');
   } else {
     cache[srcPath] = sig;
     stdout.writeln('  ✓ $label 生成完成');

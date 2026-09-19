@@ -40,6 +40,10 @@ class PrivacyNetException implements Exception {
 }
 
 class ApiClient {
+  /// 进程启动时刻（≈单例创建）：连接类失败的自动重试预算以此为基准，
+  /// 前 5 分钟是 iOS「无线数据」授权弹窗的高发窗口（见构造函数注释）。
+  static final DateTime _bootTime = DateTime.now();
+
   ApiClient._() {
     // HTTP 连接保活：Dart HttpClient 默认 idleTimeout 只有 15s，聊天时两条消息
     // 间隔一超过 15s，下一条发送就要重新做 TLS 握手——实测本服务端冷握手约 1.6s
@@ -59,6 +63,44 @@ class ApiClient {
         },
       );
     }
+
+    // 连接类失败自动重试（iOS 首次安装「无线数据」授权修复，2026-09-19）：
+    // 国行/中国区 iOS 首次安装，App 发起网络请求时系统弹「允许 App 使用无线数据」，
+    // 弹窗挂起期间所有请求立即失败（DNS 解析失败/连接错误）。用户同意后网络才
+    // 真正可用——但之前请求失败后各页面只显示错误，不会自动再请求，客户只能杀掉
+    // App 重开（客户不会秒同意，实测踩坑）。
+    // 做法：仅对「请求从未发出」的错误类型（连接超时/连接错误/DNS 失败）延迟重试——
+    // 这条边界保证重试绝不会造成重复提交（服务端根本没收到过请求）。
+    // 预算：启动后 5 分钟内（授权弹窗高发窗口）最多重试 10 次 × 3s ≈ 30s，
+    // 覆盖「用户迟疑一会儿才同意」；窗口外只补 1 次（连接抖动兜底，不拖慢真离线）。
+    _dio.interceptors.add(InterceptorsWrapper(
+      onError: (e, handler) async {
+        final connectFailure = switch (e.type) {
+          DioExceptionType.connectionTimeout ||
+          DioExceptionType.connectionError =>
+            true,
+          DioExceptionType.unknown => e.error is SocketException,
+          _ => false,
+        };
+        if (!connectFailure) return handler.next(e);
+        final opts = e.requestOptions;
+        final count = (opts.extra['_netRetry'] as int?) ?? 0;
+        final inStartupWindow =
+            DateTime.now().difference(_bootTime) < const Duration(minutes: 5);
+        final maxRetry = inStartupWindow ? 10 : 1;
+        if (count >= maxRetry) return handler.next(e);
+        opts.extra['_netRetry'] = count + 1;
+        await Future.delayed(const Duration(seconds: 3));
+        try {
+          final resp = await _dio.fetch(opts);
+          return handler.resolve(resp);
+        } on DioException catch (e2) {
+          return handler.next(e2);
+        } catch (_) {
+          return handler.next(e);
+        }
+      },
+    ));
 
     // 401 统一处理：用 refreshToken 换新 access → 重试原请求；刷新失败清登录态并回调跳登录
     _dio.interceptors.add(InterceptorsWrapper(

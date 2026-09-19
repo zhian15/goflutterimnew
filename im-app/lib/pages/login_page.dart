@@ -89,8 +89,6 @@ class _LoginPageState extends State<LoginPage> {
     _agreeChecked = AppSettings.instance.policyAgreed;
     _loadBrand();
     _probeApi();
-    // 每 20 秒复测一次，保证离开页面进来说明是实时状态
-    _apiTimer = Timer.periodic(const Duration(seconds: 20), (_) => _probeApi());
   }
 
   @override
@@ -137,6 +135,10 @@ class _LoginPageState extends State<LoginPage> {
   // ============================================================
   /// GET /api/v1/health，独立轻量 Dio（3s 超时，不走鉴权拦截器）。
   /// 服务器有任何响应（含 4xx/5xx）都算"通"，只有连接失败/超时才算不通。
+  ///
+  /// 自适应复测间隔（2026-09-19）：接口不通时 3 秒快探——iOS 首次安装的
+  /// 「无线数据」授权弹窗期间探测全失败，用户同意后要快速自愈（改品牌/
+  /// 状态点），固定 20 秒要等太久；通了再回到 20 秒慢探。
   Future<void> _probeApi() async {
     final sw = Stopwatch()..start();
     try {
@@ -151,6 +153,11 @@ class _LoginPageState extends State<LoginPage> {
       sw.stop();
       if (!mounted) return;
       final ms = sw.elapsedMilliseconds;
+      // 探测从"不通"恢复"通"，且品牌配置还没拿到（首次安装授权窗口里
+      // preloadConfig 全失败过）→ 自动补拉一次，logo/名字/游客开关自愈
+      if (_apiState == _apiDown && _cfg == null) {
+        unawaited(_loadBrand());
+      }
       setState(() {
         _apiMs = ms;
         _apiState = ms > 1000 ? _apiSlow : _apiOk;
@@ -161,7 +168,21 @@ class _LoginPageState extends State<LoginPage> {
         _apiState = _apiDown;
         _apiMs = null;
       });
+    } finally {
+      _scheduleProbe();
     }
+  }
+
+  /// 按当前状态安排下一次探测：不通 3 秒快探（等授权/等网络自愈），通则 20 秒慢探。
+  void _scheduleProbe() {
+    if (!mounted) return;
+    _apiTimer?.cancel();
+    _apiTimer = Timer(
+      _apiState == _apiDown
+          ? const Duration(seconds: 3)
+          : const Duration(seconds: 20),
+      _probeApi,
+    );
   }
 
   // ============================================================
